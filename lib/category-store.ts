@@ -23,7 +23,7 @@ const NAME_PATTERN = /^\p{L}[\p{L} '’()-]*$/u;
 
 /** Top-level addresses already used by the site (or reserved for it): a category slug may not take them. */
 const RESERVED_SLUGS: ReadonlySet<string> = new Set([
-  "admin", "api", "blog", "iletisim", "firma", "firmalar", "firma-profili", "sehirler", "sehir",
+  "admin", "api", "blog", "iletisim", "firma", "firmalar", "firma-profili", "sehirler", "sehir", "hizmetler",
   "kategori", "kategoriler", "banner-gorsel", "kvkk-aydinlatma-metni", "kvkk-basvurusu",
   "kullanim-kosullari", "cerez-bilgilendirmesi", "robots", "sitemap", "sikayet", "basvuru",
 ]);

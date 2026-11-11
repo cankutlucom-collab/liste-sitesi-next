@@ -7,6 +7,7 @@
  */
 
 import { linkCategoryIndex } from "./cities";
+import { applySiteContact } from "./site-contact";
 
 export const POLICY_PATHS = {
   kvkk: "/kvkk-aydinlatma-metni",
@@ -28,7 +29,7 @@ const FOOTER_LINKS: Record<string, string> = {
  */
 export function linkPolicyPages(html: string): string {
   // Every design page passes through here, so the retired "/sehirler" menu/footer links are fixed here too.
-  return linkCategoryIndex(html)
+  return applySiteContact(linkCategoryIndex(html))
     .replace(
       /<a href="#"(?: data-pending="true")?((?: (?:class|style)="[^"]*")*)>(KVKK Aydınlatma Metni|Kullanım Koşulları)<\/a>/g,
       (_link, attrs: string, text: string) => `<a href="${FOOTER_LINKS[text]}"${attrs}>${text}</a>`,

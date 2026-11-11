@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { listPosts } from "../lib/blog";
 import { CATEGORY_PATH, CATEGORY_SLUG, cityPagePath } from "../lib/cities";
 import { listVisibleCities } from "../lib/city-store";
+import { listServiceDirectory, servicePagePath, SERVICES_PATH } from "../lib/service-directory";
 import { firmProfilePath, listAllPublishedFirms, listPublishedFirmsInCategory } from "../lib/firms";
 
 /*
@@ -29,6 +30,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const pages: MetadataRoute.Sitemap = ["/", ...(hasCategoryFirms ? [CATEGORY_PATH] : []), "/iletisim", "/blog"].map((path) => ({
     url: origin + path,
   }));
+
+  const services = listServiceDirectory();
+  if (services.length > 0) pages.push({ url: origin + SERVICES_PATH });
+  for (const service of services) pages.push({ url: origin + servicePagePath(service.slug) });
 
   // Cities with at least one published firm in this category; the same rule that makes /su-yumusatma-cihazi/<slug> exist.
   for (const city of listVisibleCities(CATEGORY_SLUG)) pages.push({ url: origin + cityPagePath(city.slug) });
