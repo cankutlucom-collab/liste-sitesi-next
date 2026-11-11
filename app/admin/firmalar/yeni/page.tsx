@@ -13,7 +13,7 @@ export default async function NewFirmPage() {
   return (
     <FirmForm
       cities={listCities()}
-      categories={listCategories().map((category) => category.slug)}
+      categories={listCategories()}
       firmCategories={[CATEGORY_SLUG]}
       missing={missing}
     />

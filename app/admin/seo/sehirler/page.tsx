@@ -1,7 +1,7 @@
 import { requireAdmin } from "../../../../lib/auth";
 import { CATEGORY_SLUG, cityPagePath, defaultCityTitle } from "../../../../lib/cities";
-import { ERROR_MESSAGES, LIMITS, isErrorCode, listCitiesForAdmin, type CityAdminRow } from "../../../../lib/city-store";
-import { createCityAction } from "./actions";
+import { ERROR_MESSAGES, isErrorCode, listCitiesForAdmin, type CityAdminRow } from "../../../../lib/city-store";
+import CityAddForm from "./CityAddForm";
 import DeleteCityForm from "./DeleteCityForm";
 
 /*
@@ -11,7 +11,7 @@ import DeleteCityForm from "./DeleteCityForm";
  */
 
 const OK_NOTICES: Record<string, string> = {
-  eklendi: "Şehir açıldı. Firma formunun şehir listesinde seçilebilir; sayfası, yayında ilk firma olunca görünür.",
+  eklendi: "Şehir eklendi.Firma formunun şehir listesinde seçilebilir; sayfası, yayında ilk firma olunca görünür.",
   silindi: "Şehir silindi.",
 };
 
@@ -81,18 +81,8 @@ export default async function CitySeoPage({ searchParams }: { searchParams: Prom
       {ok && <p className="adm-alert adm-alert--ok" role="status">{ok}</p>}
       {error && <p className="adm-alert adm-alert--error" role="alert">{error}</p>}
 
-      <section className="adm-card" aria-labelledby="sehir-ac">
-        <form action={createCityAction} className="adm-form">
-          <h2 id="sehir-ac" style={{ margin: 0 }}>Şehir aç</h2>
-          <div className="adm-field">
-            <label htmlFor="yeni-sehir">Şehir adı</label>
-            <input id="yeni-sehir" name="name" type="text" required maxLength={LIMITS.name} autoComplete="off" placeholder="Örn. Kıbrıs" />
-            <small>Sayfa adresi şehir adından otomatik üretilir: küçük harf, Türkçe karaktersiz, yalnızca a-z ve tire (ör. /su-yumusatma-cihazi/afyon-karahisar).</small>
-          </div>
-          <div className="adm-actions">
-            <button type="submit" className="adm-btn adm-btn--primary">Şehri aç</button>
-          </div>
-        </form>
+      <section className="adm-card" aria-labelledby="sehir-ekle">
+        <CityAddForm />
       </section>
 
       <section className="adm-panel" aria-labelledby="sehir-liste">

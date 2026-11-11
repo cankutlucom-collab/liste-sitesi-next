@@ -1,7 +1,7 @@
 import { DESIGN_FAQS, getDb } from "./db";
 import {
   CITY_SLUG_PATTERN, applyCityTokens, categoryDescriptionPattern, categoryDisplayName, categoryTitleForm,
-  categoryTitlePattern, cityDescriptionPattern, cityTitlePattern,
+  categoryTitlePattern, cityDescriptionPattern, cityTitlePattern, slugifyCity, CATEGORY_SLUG,
 } from "./cities";
 import { LIMITS, cityBySlug, clean } from "./city-store";
 
@@ -17,6 +17,9 @@ type Row = Record<string, unknown>;
 
 export const CATEGORY_SLUG_MAX = 60;
 export const CATEGORY_NAME_MAX = 60;
+
+/** Page name: starts with a letter; letters, spaces, hyphen, apostrophe and parentheses follow. */
+const NAME_PATTERN = /^\p{L}[\p{L} '’()-]*$/u;
 
 /** Top-level addresses already used by the site (or reserved for it): a category slug may not take them. */
 const RESERVED_SLUGS: ReadonlySet<string> = new Set([
@@ -35,8 +38,9 @@ export const ERROR_MESSAGES = {
   "adres-uzunluk": `Kategori adresi 2–${CATEGORY_SLUG_MAX} karakter olmalı.`,
   "adres-karakter": "Kategori adresi yalnızca küçük harf (a-z) ve tire içerebilir: Türkçe karakter, büyük harf, rakam, boşluk ve başta/sonda/art arda tire kullanılamaz (ör. su-aritma-cihazi).",
   "adres-ayrilmis": "Bu adres sitenin başka bir sayfası için ayrılmış. Başka bir adres seçin.",
-  "ad-uzunluk": `Kategori adı 2–${CATEGORY_NAME_MAX} karakter olmalı.`,
-  "ad-karakter": "Kategori adı yalnızca harf, boşluk, tire ve kesme işareti içerebilir (ör. Su Arıtma Cihazı).",
+  "adres-sabit": "Ana kategorinin adresi değiştirilemez.",
+  "ad-uzunluk": `Sayfa adı 2–${CATEGORY_NAME_MAX} karakter olmalı.`,
+  "ad-karakter": "Sayfa adı yalnızca harf, boşluk, tire, kesme işareti ve parantez () içerebilir (ör. Endüstriyel Su Arıtma Cihazı (Ters Ozmoz)).",
   "kategori-kayitli": "Bu kategori zaten kayıtlı.",
   "kategori-yok": "Kategori bulunamadı.",
   "sehir-yok": "Şehir bulunamadı; silinmiş olabilir.",
@@ -123,18 +127,21 @@ export function listCategoriesForAdmin(): CategoryAdminRow[] {
 }
 
 /**
- * Adds a category. The slug is taken exactly as typed (surrounding spaces removed): it is validated, never
- * silently converted. The category page starts with the design's FAQ so there is something to edit.
+ * Adds a category. The address is the typed text turned into a slug (Turkish letters, spaces and capitals
+ * included). The page name is stored as written; an empty name is taken from that same text.
+ * The category page starts with the design's FAQ so there is something to edit.
  */
 export function createCategory(rawSlug: unknown, rawName: unknown): Result & { slug?: string } {
-  const slug = clean(rawSlug);
+  const typed = clean(rawSlug);
+  const slug = slugifyCity(typed);
   if (slug.length < 2 || slug.length > CATEGORY_SLUG_MAX) return { ok: false, code: "adres-uzunluk" };
   if (!CITY_SLUG_PATTERN.test(slug)) return { ok: false, code: "adres-karakter" };
   if (RESERVED_SLUGS.has(slug)) return { ok: false, code: "adres-ayrilmis" };
-  // The name is stored in its heading spelling (Turkish capitals); the sentence spelling is derived from it.
-  const name = categoryTitleForm(clean(rawName));
+  const written = clean(rawName).replace(/\s+/g, " ");
+  const phrase = /[^\u0000-\u007F]|\s/.test(typed) ? typed : slug.replaceAll("-", " ");
+  const name = written || categoryTitleForm(phrase);
   if (name.length < 2 || name.length > CATEGORY_NAME_MAX) return { ok: false, code: "ad-uzunluk" };
-  if (!/^\p{L}[\p{L} '’-]*$/u.test(name)) return { ok: false, code: "ad-karakter" };
+  if (!NAME_PATTERN.test(name)) return { ok: false, code: "ad-karakter" };
   const db = getDb();
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -151,6 +158,40 @@ export function createCategory(rawSlug: unknown, rawName: unknown): Result & { s
     }
     const insertFaq = db.prepare("INSERT INTO page_faqs (category_slug, city_slug, question, answer, position) VALUES (?, '', ?, ?, ?)");
     DESIGN_FAQS.forEach(([question, answer], index) => insertFaq.run(slug, question, answer, index + 1));
+    db.exec("COMMIT");
+    return { ok: true, slug };
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+/**
+ * Changes the address of a category. The typed text goes through the same address rule as on add.
+ * Firms, page texts and FAQ move to the new address; the page name stays as it is.
+ * The built-in main category keeps its address (its public pages are fixed in code).
+ */
+export function renameCategorySlug(oldSlug: string, rawSlug: unknown): Result & { slug?: string } {
+  if (!categoryExists(oldSlug)) return { ok: false, code: "kategori-yok" };
+  const slug = slugifyCity(clean(rawSlug));
+  if (slug === oldSlug) return { ok: true, slug };
+  if (oldSlug === CATEGORY_SLUG) return { ok: false, code: "adres-sabit" };
+  if (slug.length < 2 || slug.length > CATEGORY_SLUG_MAX) return { ok: false, code: "adres-uzunluk" };
+  if (!CITY_SLUG_PATTERN.test(slug)) return { ok: false, code: "adres-karakter" };
+  if (RESERVED_SLUGS.has(slug)) return { ok: false, code: "adres-ayrilmis" };
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (db.prepare("SELECT 1 FROM categories WHERE slug = ?").get(slug)) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "kategori-kayitli" };
+    }
+    // Foreign keys point at categories(slug): add the new row first, move the children, drop the old row.
+    db.prepare("INSERT INTO categories (slug, created_at, name) SELECT ?, created_at, name FROM categories WHERE slug = ?").run(slug, oldSlug);
+    for (const table of ["firm_categories", "page_seo", "page_faqs"]) {
+      db.prepare(`UPDATE ${table} SET category_slug = ? WHERE category_slug = ?`).run(slug, oldSlug);
+    }
+    db.prepare("DELETE FROM categories WHERE slug = ?").run(oldSlug);
     db.exec("COMMIT");
     return { ok: true, slug };
   } catch (error) {

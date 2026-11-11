@@ -125,5 +125,16 @@
 .s125{align-self: flex-start; margin-top: 6px; border: 1px solid #6677D9; color: #FFFFFF; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-weight: 600}
 .s126{border-top: 1px solid rgba(255, 255, 255, 0.16); padding-top: 20px; font-size: 13px}
 
+/* Footer filtre satırı: kategori, şehir, Git yan yana ve eşit yükseklikte */
+.footer-filter{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:stretch;gap:10px;width:100%;max-width:100%}
+.footer-filter__select{flex:1 1 0;min-width:0;width:100%;height:48px;box-sizing:border-box;padding:0 12px;background:#FFFFFF;border:1px solid #BCC4F0;border-radius:8px;font:inherit;font-size:16px;line-height:1.25;color:#1A2433;text-overflow:ellipsis}
+.footer-filter__select:focus-visible{outline:3px solid #DDE2FF;outline-offset:2px}
+.footer-filter__select:disabled{opacity:.55;cursor:not-allowed}
+.footer-filter__go{flex:0 0 auto;height:48px;box-sizing:border-box;padding:0 22px;background:#0013A3;color:#FFFFFF;border:1px solid #0013A3;border-radius:8px;font:inherit;font-size:16px;font-weight:600;line-height:1;cursor:pointer}
+.footer-filter__go:hover:not(:disabled){background:#000845;border-color:#000845}
+.footer-filter__go:focus-visible{outline:3px solid #DDE2FF;outline-offset:2px}
+.footer-filter__go:disabled{opacity:.45;cursor:not-allowed}
+@media (max-width:480px){.footer-filter{gap:6px}.footer-filter__select{padding:0 8px;font-size:15px}.footer-filter__go{padding:0 14px;font-size:15px}}
+
 
 

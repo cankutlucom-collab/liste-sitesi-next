@@ -146,11 +146,13 @@ export function listFooterGroups(categorySlug?: string): FooterGroup[] {
   return groups.filter((group) => group.cities.length > 0);
 }
 
-export function linkHomeDesignNavigation(html: string, categorySlug?: string): string {
-  const groups = listFooterGroups(categorySlug);
+export function linkHomeDesignNavigation(html: string, categorySlug?: string, citySlug?: string): string {
+  // Footer boxes: the category box lists every category with a published firm; the city box only the selected one's cities.
+  const groups = listFooterGroups();
+  const chosen = groups.find((group) => group.slug === categorySlug);
   // Category page: the category's name; pages without a single category: the site name.
-  const heading = categorySlug && groups[0] ? groups[0].name : SITE_TITLE_STEM;
-  return linkHomeDesignNavigationFor(html, groups, heading);
+  const heading = chosen ? chosen.name : SITE_TITLE_STEM;
+  return linkHomeDesignNavigationFor(html, groups, heading, { category: chosen?.slug, city: citySlug });
 }
 
 export function linkCityDirectory(html: string): string {
@@ -185,28 +187,47 @@ function titleCase(name: string): string {
     .join(" ");
 }
 
-/** Slug is derived from the name with the catalog rule (lowercase, no Turkish characters, a-z and hyphen). */
-export function createCity(rawName: unknown): Result & { slug?: string } {
-  const name = titleCase(clean(rawName));
+/**
+ * Same logic as createCategory: the typed URL text goes through slugifyCity here on the server (that is the
+ * address); the page name is stored exactly as written, and only when left empty it is made from the typed text.
+ */
+export function createCity(rawSlug: unknown, rawName: unknown): Result & { slug?: string } {
+  const typed = clean(rawSlug);
+  const slug = slugifyCity(typed);
+  if (!slug || slug.length > LIMITS.name || !CITY_SLUG_PATTERN.test(slug)) return { ok: false, code: "adres-uretilemedi" };
+  const written = clean(rawName);
+  const phrase = /[^\u0000-\u007F]|\s/.test(typed) ? typed : slug.replaceAll("-", " ");
+  const name = written || titleCase(phrase);
   if (name.length < 2 || name.length > LIMITS.name) return { ok: false, code: "ad-uzunluk" };
   if (!/^\p{L}[\p{L} '’-]*$/u.test(name)) return { ok: false, code: "ad-karakter" };
-  const slug = slugifyCity(name);
-  if (!slug || slug.length > LIMITS.name || !CITY_SLUG_PATTERN.test(slug)) return { ok: false, code: "adres-uretilemedi" };
   const db = getDb();
   if (db.prepare("SELECT 1 FROM cities WHERE slug = ? OR name = ?").get(slug, name)) return { ok: false, code: "kayitli" };
-  db.prepare("INSERT INTO cities (slug, name, created_at) VALUES (?, ?, ?)").run(slug, name, new Date().toISOString());
-  // The new city starts with the design's questions on the current category's city page (editable in the panel).
-  const insertFaq = db.prepare("INSERT INTO page_faqs (category_slug, city_slug, question, answer, position) VALUES (?, ?, ?, ?, ?)");
-  DESIGN_FAQS.forEach(([question, answer], index) => insertFaq.run(CATEGORY_SLUG, slug, question, answer, index + 1));
-  // Title and description start filled with the built-in city patterns of every category (editable in the panel;
-  // an existing record, which cannot exist for a brand-new city, would be kept).
-  const categories = db.prepare("SELECT slug, name FROM categories").all() as Row[];
-  const insertSeo = db.prepare(
-    "INSERT OR IGNORE INTO page_seo (category_slug, city_slug, meta_title, meta_description) VALUES (?, ?, ?, ?)",
-  );
-  for (const category of categories) {
-    const displayName = categoryDisplayName(String(category.slug), String(category.name));
-    insertSeo.run(String(category.slug), slug, cityTitlePattern(displayName), cityDescriptionPattern(displayName));
+  // City, FAQs and SEO records are written in ONE transaction: if any step fails, nothing is left behind.
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    // Re-check inside the lock so two simultaneous requests cannot both create the city.
+    if (db.prepare("SELECT 1 FROM cities WHERE slug = ? OR name = ?").get(slug, name)) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "kayitli" };
+    }
+    db.prepare("INSERT INTO cities (slug, name, created_at) VALUES (?, ?, ?)").run(slug, name, new Date().toISOString());
+    // The new city starts with the design's questions on the current category's city page (editable in the panel).
+    const insertFaq = db.prepare("INSERT INTO page_faqs (category_slug, city_slug, question, answer, position) VALUES (?, ?, ?, ?, ?)");
+    DESIGN_FAQS.forEach(([question, answer], index) => insertFaq.run(CATEGORY_SLUG, slug, question, answer, index + 1));
+    // Title and description start filled with the built-in city patterns of every category (editable in the panel;
+    // an existing record, which cannot exist for a brand-new city, would be kept).
+    const categories = db.prepare("SELECT slug, name FROM categories").all() as Row[];
+    const insertSeo = db.prepare(
+      "INSERT OR IGNORE INTO page_seo (category_slug, city_slug, meta_title, meta_description) VALUES (?, ?, ?, ?)",
+    );
+    for (const category of categories) {
+      const displayName = categoryDisplayName(String(category.slug), String(category.name));
+      insertSeo.run(String(category.slug), slug, cityTitlePattern(displayName), cityDescriptionPattern(displayName));
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
   return { ok: true, slug };
 }

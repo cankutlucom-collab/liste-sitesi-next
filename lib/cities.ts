@@ -208,7 +208,7 @@ export function categoryDisplayName(slug: string, storedName: string): string {
  *   city:     "Ankara Su Yumuşatma Cihazı: 14 Firma: Su Arıtma Cihazı Firmaları"
  */
 export function categoryTitlePattern(name: string): string {
-  return `${categoryTitleForm(name)}: [Firma Sayısı] Firma: ${SITE_TITLE}`;
+  return `${name.trim().replace(/\s+/g, " ")}: [Firma Sayısı] Firma: ${SITE_TITLE}`;
 }
 
 export function categoryDescriptionPattern(name: string): string {
@@ -216,7 +216,7 @@ export function categoryDescriptionPattern(name: string): string {
 }
 
 export function cityTitlePattern(name: string): string {
-  return `[Şehir Adı] ${categoryTitleForm(name)}: [Firma Sayısı] Firma: ${SITE_TITLE}`;
+  return `[Şehir Adı] ${name.trim().replace(/\s+/g, " ")}: [Firma Sayısı] Firma: ${SITE_TITLE}`;
 }
 
 export function cityDescriptionPattern(name: string): string {
@@ -314,31 +314,52 @@ export const SITE_TITLE_STEM = SITE_TITLE.replace(/ Firmaları$/, "");
  *    /<kategori-slug>/<sehir-slug>. A city without a published firm in the category is never in a group.
  *    One group = plain city list (category page); several groups = a category label above each list.
  */
-export function linkCityNav(html: string, groups: readonly FooterGroup[], heading: string): string {
+export function linkCityNav(
+  html: string,
+  groups: readonly FooterGroup[],
+  heading: string,
+  selected: { category?: string; city?: string } = {},
+): string {
   const withHeading = html.replace(
     /(<h2 id="sehir-baslik"[^>]*>)([^<]*)(<\/h2>)/,
     (_, open: string, text: string, close: string) =>
       `${open}${text.replace("Endüstriyel (Sanayi Tipi) Su Arıtma", () => escapeText(heading))}${close}`,
   );
-  return withHeading.replace(/<nav aria-label="Şehirler" class="s112">[\s\S]*?<\/nav>/, () => {
-    const lists = groups
-      .filter((group) => group.cities.length)
-      .map((group) => {
-        const anchors = group.cities
-          .map((city) => `<a href="/${group.slug}/${city.slug}" class="s113">${escapeText(city.name)}</a>`)
-          .join("\n");
-        const label = groups.length > 1 ? escapeText(group.name) + " şehirleri" : "Şehirler";
-        const nav = `<nav aria-label="${label}" class="s112">\n${anchors}\n</nav>`;
-        return groups.length > 1
-          ? `<p style="margin: 12px 0 4px; font-weight: 600">${escapeText(group.name)}</p>\n${nav}`
-          : nav;
-      });
-    return lists.join("\n") || '<nav aria-label="Şehirler" class="s112">\n</nav>';
+  return withHeading.replace(/<details>\s*<summary class="s111">Şehir seçin[\s\S]*?<\/details>/, () => {
+    const live = groups.filter((group) => group.cities.length);
+    const chosen = live.find((group) => group.slug === selected.category);
+    // Every category's published cities ride along on the category box (data-footer-cities) so public/app.js and
+    // public/design.js fill the city box without a request. Neither box navigates; only the Git button does
+    // (/kategori, or /kategori/sehir when a city is chosen).
+    const cityMap = JSON.stringify(
+      Object.fromEntries(live.map((group) => [group.slug, group.cities.map((city) => [city.name, city.slug])])),
+    );
+    const categoryOptions = live
+      .map((group) =>
+        `<option value="${group.slug}"${group === chosen ? " selected" : ""}>${escapeText(group.name)}</option>`)
+      .join("\n");
+    const cityOptions = (chosen?.cities ?? [])
+      .map((city) =>
+        `<option value="/${chosen!.slug}/${city.slug}"${city.slug === selected.city ? " selected" : ""}>${escapeText(city.name)}</option>`)
+      .join("\n");
+    return (
+      `<div class="footer-filter">\n` +
+      `<select aria-label="Kategori seçin" data-footer-nav="category" data-footer-cities="${escapeText(cityMap)}" class="footer-filter__select">\n` +
+      `<option value=""${chosen ? "" : " selected"} disabled>Kategori seçin</option>\n${categoryOptions}\n</select>\n` +
+      `<select aria-label="Şehir seçin" data-footer-nav="city" class="footer-filter__select"${chosen ? "" : " disabled"}>\n` +
+      `<option value=""${selected.city && chosen ? "" : " selected"} disabled>${chosen ? "Şehir seçin" : "Önce kategori seçin"}</option>\n${cityOptions}\n</select>\n` +
+      `<button type="button" data-footer-nav="go" class="footer-filter__go"${chosen ? "" : " disabled"}>Git</button>\n</div>`
+    );
   });
 }
 
-export function linkHomeDesignNavigation(html: string, groups: readonly FooterGroup[], heading: string): string {
-  return linkCityNav(html, groups, heading).replaceAll('href="/iletisim/#sikayet" data-pending="true"', 'href="/iletisim/sikayet"');
+export function linkHomeDesignNavigation(
+  html: string,
+  groups: readonly FooterGroup[],
+  heading: string,
+  selected: { category?: string; city?: string } = {},
+): string {
+  return linkCityNav(html, groups, heading, selected).replaceAll('href="/iletisim/#sikayet" data-pending="true"', 'href="/iletisim/sikayet"');
 }
 
 const TR_ALPHABET = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ";

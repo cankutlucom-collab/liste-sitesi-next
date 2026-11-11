@@ -84,7 +84,7 @@ export async function saveFirmAction(_prev: FirmFormState, formData: FormData): 
     intent === "publish" ? "published" : intent === "unpublish" ? "draft" : existing?.status ?? "draft";
 
   const raw = Object.fromEntries(
-    ["name", "city", "phone", "email", "address", "whatsapp", "website", "shortDescription", "packageLevel"].map((key) => [key, formData.get(key)]),
+    ["name", "city", "phone", "email", "address", "whatsapp", "website", "mapUrl", "shortDescription", "packageLevel"].map((key) => [key, formData.get(key)]),
   );
   // Package is optional and never a publish requirement. If a request omits the field entirely,
   // keep the stored package instead of silently clearing it; validateFirm applies the allow-list.

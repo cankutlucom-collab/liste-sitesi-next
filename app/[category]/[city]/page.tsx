@@ -51,7 +51,7 @@ export default async function CategoryCityPage({ params }: { params: Params }) {
   const { title } = resolvePageTexts(slug, city.slug, city.name, cityFirmCount(allPublished, city));
   const heading = city.name + " " + name;
   const template = setDesignH1(
-    linkPolicyPages(linkHomeDesignNavigation(home, slug))
+    linkPolicyPages(linkHomeDesignNavigation(home, slug, city.slug))
       .replaceAll(DESIGN_PAGE_KEYWORD, () => heading)
       .replace("Şehrinizdeki " + heading, () => heading)
       .replace(DESIGN_DESCRIPTION_SUBJECT, () => categoryDescriptionSubject(name))

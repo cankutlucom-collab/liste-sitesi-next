@@ -43,7 +43,7 @@ export default async function EditFirmPage({
     <FirmForm
       key={firm.updatedAt}
       cities={listCities()}
-      categories={listCategories().map((category) => category.slug)}
+      categories={listCategories()}
       firmCategories={listFirmCategories(firm.id)}
       firm={firm}
       publicProfilePath={firm.status === "published" ? firmProfilePath(firm) : undefined}

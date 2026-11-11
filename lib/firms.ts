@@ -21,6 +21,8 @@ export type FirmInput = {
   address: string;
   whatsapp: string;
   website: string;
+  /** Optional Google Maps link; "" = none. */
+  mapUrl: string;
   shortDescription: string;
   /** "" = no package assigned. */
   packageLevel: PackageLevel | "";
@@ -46,6 +48,7 @@ export const FIELD_LABELS: Record<keyof FirmInput, string> = {
   address: "Adres",
   whatsapp: "WhatsApp",
   website: "Web sitesi",
+  mapUrl: "Harita",
   shortDescription: "Kısa tanıtım",
   packageLevel: "Paket",
 };
@@ -58,6 +61,7 @@ const MAX_LENGTH: Record<keyof FirmInput, number> = {
   address: 300,
   whatsapp: 30,
   website: 300,
+  mapUrl: 500,
   shortDescription: 300,
   packageLevel: 20,
 };
@@ -124,6 +128,29 @@ export function normalizeWebsite(input: string): string | null {
   return url.toString();
 }
 
+/** Google Maps link: known Google Maps hosts only. Returns the normalised https URL or null. */
+export function normalizeMapUrl(input: string): string | null {
+  const value = /^https?:\/\//i.test(input) ? input : "https://" + input;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:") return null;
+  if (url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname;
+  // Google country suffixes only: com, xx (ccTLD), co.xx, com.xx — never arbitrary trailing labels.
+  const gSuffix = "(?:com|[a-z]{2}|co\\.[a-z]{2}|com\\.[a-z]{2})";
+  const isGoogle = new RegExp(`^(?:www\\.)?google\\.${gSuffix}$`).test(host) && path.startsWith("/maps");
+  const isMapsHost = new RegExp(`^maps\\.google\\.${gSuffix}$`).test(host);
+  const isShort = host === "maps.app.goo.gl" || host === "g.page" || (host === "goo.gl" && path.startsWith("/maps"));
+  if (!isGoogle && !isMapsHost && !isShort) return null;
+  url.protocol = "https:";
+  return url.toString();
+}
+
 /* ---------- validation ---------- */
 
 export type ValidationMode = "draft" | "publish";
@@ -145,6 +172,7 @@ export function validateFirm(raw: Record<string, unknown>, mode: ValidationMode)
     address: cleanText(raw.address),
     whatsapp: cleanText(raw.whatsapp),
     website: cleanText(raw.website),
+    mapUrl: cleanText(raw.mapUrl),
     shortDescription: cleanText(raw.shortDescription),
     packageLevel: isPackageLevel(rawPackage) ? rawPackage : "",
   };
@@ -190,6 +218,13 @@ export function validateFirm(raw: Record<string, unknown>, mode: ValidationMode)
     else errors.website = "Geçerli bir web adresi girin (ör. www.firma.com.tr).";
   }
 
+  // Optional in every mode (never a publish requirement); only a filled value is checked.
+  if (!errors.mapUrl && values.mapUrl) {
+    const mapUrl = normalizeMapUrl(values.mapUrl);
+    if (mapUrl) values.mapUrl = mapUrl;
+    else errors.mapUrl = "Geçerli bir Google Maps bağlantısı girin (ör. https://maps.app.goo.gl/…).";
+  }
+
   if (mode === "publish") {
     if (!errors.phone && !values.phone) errors.phone = "Yayınlamak için telefon zorunlu.";
     if (!errors.email && !values.email) errors.email = "Yayınlamak için e-posta zorunlu.";
@@ -219,6 +254,7 @@ function toFirm(row: Row): Firm {
     address: String(row.address),
     whatsapp: String(row.whatsapp),
     website: String(row.website),
+    mapUrl: String(row.map_url ?? ""),
     shortDescription: String(row.short_description ?? ""),
     // NULL (pre-package records) or anything outside the allow-list reads as "no package".
     packageLevel: isPackageLevel(storedPackage) ? storedPackage : "",
@@ -269,6 +305,19 @@ export function listPublishedFirmsInCategory(categorySlug: string): Firm[] {
     )
     .all(categorySlug) as Row[];
   return rows.map(toFirm).sort(byName);
+}
+
+/** Category slugs for every firm, for the firm-list filters. */
+export function listFirmCategoryIndex(): Map<number, Set<string>> {
+  const rows = getDb().prepare("SELECT firm_id, category_slug FROM firm_categories").all() as { firm_id: number; category_slug: string }[];
+  const index = new Map<number, Set<string>>();
+  for (const row of rows) {
+    const id = Number(row.firm_id);
+    const slugs = index.get(id) ?? new Set<string>();
+    slugs.add(String(row.category_slug));
+    index.set(id, slugs);
+  }
+  return index;
 }
 
 /** Category slugs a firm is linked to (a firm may have several). */
@@ -351,12 +400,12 @@ export function createFirm(values: FirmInput, status: FirmStatus, categories: re
     const slug = uniqueFirmSlug(values.name, Number(seq?.seq ?? 0) + 1, (candidate) => exists.get(candidate) !== undefined);
     const result = db
       .prepare(
-        `INSERT INTO firms (name, slug, city, phone, email, address, whatsapp, website, short_description, package_level, status, created_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO firms (name, slug, city, phone, email, address, whatsapp, website, map_url, short_description, package_level, status, created_at, updated_at, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         values.name, slug, values.city, values.phone, values.email, values.address, values.whatsapp, values.website,
-        values.shortDescription, packageColumn(values.packageLevel), status, now, now, status === "published" ? now : null,
+        values.mapUrl, values.shortDescription, packageColumn(values.packageLevel), status, now, now, status === "published" ? now : null,
       );
     const id = Number(result.lastInsertRowid);
     const link = db.prepare("INSERT OR IGNORE INTO firm_categories (firm_id, category_slug) VALUES (?, ?)");
@@ -373,14 +422,14 @@ export function updateFirm(id: number, values: FirmInput, status: FirmStatus): v
   const now = new Date().toISOString();
   getDb()
     .prepare(
-      `UPDATE firms SET name = ?, city = ?, phone = ?, email = ?, address = ?, whatsapp = ?, website = ?,
+      `UPDATE firms SET name = ?, city = ?, phone = ?, email = ?, address = ?, whatsapp = ?, website = ?, map_url = ?,
          short_description = ?, package_level = ?, status = ?, updated_at = ?,
          published_at = CASE WHEN ? = 'published' THEN COALESCE(published_at, ?) ELSE NULL END
        WHERE id = ?`,
     )
     .run(
       values.name, values.city, values.phone, values.email, values.address, values.whatsapp, values.website,
-      values.shortDescription, packageColumn(values.packageLevel), status, now, status, now, id,
+      values.mapUrl, values.shortDescription, packageColumn(values.packageLevel), status, now, status, now, id,
     );
 }
 

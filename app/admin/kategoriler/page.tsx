@@ -1,12 +1,14 @@
 import { requireAdmin } from "../../../lib/auth";
 import {
   ERROR_MESSAGES, defaultPageTexts, getPageSeo, isErrorCode, listCategoriesForAdmin, listCategoryCities,
-  CATEGORY_NAME_MAX, CATEGORY_SLUG_MAX, type CategoryAdminRow, type PageSeo,
+  type CategoryAdminRow, type PageSeo,
 } from "../../../lib/category-store";
 import { CATEGORY_PATH, CATEGORY_SLUG, CITY_TOKENS, cityPagePath } from "../../../lib/cities";
 import { LIMITS, cityBySlug } from "../../../lib/city-store";
 import PatternRow, { CityMetaFields } from "../seo/sehirler/CopyPattern";
-import { addFaqAction, createCategoryAction, deleteFaqAction, saveMetaAction, updateFaqAction } from "./actions";
+import { addFaqAction, deleteFaqAction, saveMetaAction, updateFaqAction } from "./actions";
+import CategoryAddForm from "./CategoryAddForm";
+import CategoryUrlForm from "./CategoryUrlForm";
 
 /*
  * Kategoriler. Lists the categories and adds one (address only: lowercase a-z and hyphen). Choosing
@@ -17,6 +19,7 @@ import { addFaqAction, createCategoryAction, deleteFaqAction, saveMetaAction, up
 
 const OK_NOTICES: Record<string, string> = {
   eklendi: "Kategori eklendi. Firma formunda seçilebilir.",
+  "adres-kaydedildi": "Kategori URL’si kaydedildi.",
   kaydedildi: "Başlık ve açıklama kaydedildi.",
   "soru-eklendi": "Soru eklendi.",
   "soru-kaydedildi": "Soru güncellendi.",
@@ -165,23 +168,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
       {!selected && (
         <section className="adm-card" aria-labelledby="kategori-ekle">
-          <form action={createCategoryAction} className="adm-form">
-            <h2 id="kategori-ekle" style={{ margin: 0 }}>Kategori ekle</h2>
-            <div className="adm-field">
-              <label htmlFor="yeni-kategori-ad">Kategori adı</label>
-              <input id="yeni-kategori-ad" name="name" type="text" required minLength={2} maxLength={CATEGORY_NAME_MAX} autoComplete="off" />
-              <small>Türkçe karakterlerle yazın (ör. Su Arıtma Cihazı). Başlıkta &quot;Su Arıtma Cihazı&quot;, cümle içinde &quot;su arıtma cihazı&quot; olarak kullanılır; sayfa başlığı ve açıklaması bu adla hazır doldurulur.</small>
-            </div>
-            <div className="adm-field">
-              <label htmlFor="yeni-kategori">Kategori adresi</label>
-              <input id="yeni-kategori" name="slug" type="text" required minLength={2} maxLength={CATEGORY_SLUG_MAX}
-                pattern="[a-z]+(-[a-z]+)*" autoComplete="off" spellCheck={false} />
-              <small>Küçük harf ve tire; Türkçe karakter, büyük harf, rakam ve boşluk yok (ör. su-aritma-cihazi). Adres olduğu gibi kaydedilir, otomatik düzeltilmez.</small>
-            </div>
-            <div className="adm-actions">
-              <button type="submit" className="adm-btn adm-btn--primary">Kategori ekle</button>
-            </div>
-          </form>
+          <CategoryAddForm />
         </section>
       )}
 
@@ -211,6 +198,12 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+
+      {selected && categorySeo && (
+        <section className="adm-card" aria-labelledby="kategori-url">
+          <CategoryUrlForm key={selected.slug} category={selected.slug} locked={isMain} />
         </section>
       )}
 

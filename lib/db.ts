@@ -35,6 +35,10 @@ function migrate(db: DatabaseSync) {
     // Public address segment /firmalar/<slug> (lib/firm-slug.ts). Existing rows are filled just below.
     db.exec("ALTER TABLE firms ADD COLUMN slug TEXT DEFAULT NULL");
   }
+  if (!columns.includes("map_url")) {
+    // Optional Google Maps link. Existing rows stay '' (no map link); nothing is invented.
+    db.exec("ALTER TABLE firms ADD COLUMN map_url TEXT NOT NULL DEFAULT ''");
+  }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS firms_slug ON firms (slug)");
   backfillFirmSlugs(db);
   // Categories (slug = the public address segment, e.g. su-yumusatma-cihazi). No display name is stored yet.

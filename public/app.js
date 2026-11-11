@@ -1,3 +1,47 @@
+// Footer category / city boxes. Choosing a category only fills the city box (all cities are in
+// data-footer-cities on the category box, no request); only the Git button navigates.
+// Kept first so it works even if a later page-specific block throws. Same rule as public/design.js.
+document.addEventListener('change', event => {
+  const select = event.target;
+  if (!(select instanceof HTMLSelectElement)) return;
+  const kind = select.dataset.footerNav;
+  if (kind === 'category') {
+    const citySelect = select.parentElement && select.parentElement.querySelector('select[data-footer-nav="city"]');
+    if (!citySelect) return;
+    let map = Object.create(null);
+    try { map = JSON.parse(select.dataset.footerCities || '{}'); } catch (error) { map = Object.create(null); }
+    const cities = Object.prototype.hasOwnProperty.call(map, select.value) ? map[select.value] : [];
+    citySelect.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.textContent = cities.length ? 'Şehir seçin' : 'Önce kategori seçin';
+    citySelect.append(placeholder);
+    for (const [name, slug] of cities) {
+      const option = document.createElement('option');
+      option.value = '/' + select.value + '/' + slug;
+      option.textContent = name;
+      citySelect.append(option);
+    }
+    citySelect.disabled = !cities.length;
+    const goButton = select.parentElement.querySelector('button[data-footer-nav="go"]');
+    if (goButton) goButton.disabled = !Object.prototype.hasOwnProperty.call(map, select.value);
+  }
+});
+// The Git button is the only thing that navigates: /kategori-slug, or /kategori-slug/sehir-slug if a city is chosen.
+document.addEventListener('click', event => {
+  const button = event.target instanceof Element ? event.target.closest('button[data-footer-nav="go"]') : null;
+  if (!button || button.disabled) return;
+  const box = button.parentElement;
+  const category = box.querySelector('select[data-footer-nav="category"]');
+  const city = box.querySelector('select[data-footer-nav="city"]');
+  if (!category || !category.value) return;
+  const target = city && !city.disabled && city.value ? city.value : '/' + category.value;
+  if (!target.startsWith('/') || target.startsWith('//')) return;
+  window.location.assign(target);
+});
+
 const toggle = document.querySelector('.menu-toggle');
 const menu = document.getElementById('ana-menu');
 function closeMenu() {

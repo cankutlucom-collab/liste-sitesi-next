@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "../../../lib/auth";
 import {
-  addPageFaq, createCategory, deletePageFaq, savePageMeta, updatePageFaq, type Result,
+  addPageFaq, createCategory, deletePageFaq, renameCategorySlug, savePageMeta, updatePageFaq, type Result,
 } from "../../../lib/category-store";
 import { parseId } from "../../../lib/firms";
 
@@ -41,6 +41,16 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
   revalidatePath(BASE);
   redirect(`${BASE}?durum=eklendi&kategori=${encodeURIComponent(result.slug ?? "")}`);
+}
+
+export async function renameCategoryAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const category = field(formData, "category");
+  const result = renameCategorySlug(category, formData.get("slug"));
+  if (!result.ok) redirect(`${editorUrl(category, "")}&hata=${result.code}`);
+  revalidatePath("/", "layout");
+  revalidatePath(BASE);
+  redirect(`${editorUrl(result.slug ?? category, "")}&durum=adres-kaydedildi`);
 }
 
 export async function saveMetaAction(formData: FormData): Promise<void> {

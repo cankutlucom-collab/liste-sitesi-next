@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { saveFirmAction, type FirmFormState } from "./actions";
 import { DEFAULT_CITY, cityPagePath, type City } from "../../lib/cities";
 import type { Firm, FirmInput } from "../../lib/firms";
@@ -11,8 +11,8 @@ type Notice = { text: string; kind: "ok" | "error" };
 type Props = {
   /** Registered cities (SQLite), read on the server: the only choices the city select offers. */
   cities: City[];
-  /** Registered category slugs (SQLite), read on the server: the only choices the category list offers. */
-  categories: string[];
+  /** Registered categories (SQLite), read on the server: the slug is submitted, the page name is shown. */
+  categories: { slug: string; name: string }[];
   /** Categories the saved firm is linked to; for a new firm the preselected default. */
   firmCategories: string[];
   firm?: Firm;
@@ -43,6 +43,7 @@ const FIELDS: FieldDef[] = [
   { key: "address", label: "Adres", publishRequired: true, multiline: true, placeholder: "Mahalle, cadde/sokak, no, ilçe", autoComplete: "street-address" },
   { key: "whatsapp", label: "WhatsApp", publishRequired: false, type: "tel", placeholder: "0532 123 45 67" },
   { key: "website", label: "Web sitesi", publishRequired: false, type: "url", placeholder: "www.firma.com.tr", autoComplete: "url" },
+  { key: "mapUrl", label: "Harita", publishRequired: false, type: "url", placeholder: "Google Maps bağlantısı (https://maps.app.goo.gl/…)" },
   { key: "shortDescription", label: "Kısa tanıtım", publishRequired: false, multiline: true, maxLength: 300, placeholder: "Firmanızı 1–2 cümleyle tanıtın (isteğe bağlı, en fazla 300 karakter)" },
 ];
 
@@ -57,24 +58,6 @@ const CHECKLIST: { key: keyof FirmInput; label: string }[] = [
   ...FIELDS.filter((def) => def.publishRequired && def.key !== "name").map((def) => ({ key: def.key, label: def.label })),
 ];
 
-type Preview = Pick<FirmInput, "name" | "city" | "shortDescription" | "address" | "phone" | "email">;
-const PREVIEW_KEYS: (keyof Preview)[] = ["name", "city", "shortDescription", "address", "phone", "email"];
-
-function toPreview(values: Partial<FirmInput>): Preview {
-  return {
-    name: values.name ?? "",
-    city: values.city || DEFAULT_CITY,
-    shortDescription: values.shortDescription ?? "",
-    address: values.address ?? "",
-    phone: values.phone ?? "",
-    email: values.email ?? "",
-  };
-}
-
-function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((word) => word.charAt(0)).join("").toLocaleUpperCase("tr-TR");
-}
-
 const ICON_ALERT = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 16.5v.5" /></svg>
 );
@@ -83,10 +66,6 @@ const ICON_OK = (
 );
 
 export default function FirmForm({ cities, categories, firmCategories, firm, publicProfilePath, missing, updatedLabel, notice }: Props) {
-  const cityPath = (name: string): string | null => {
-    const city = cities.find((entry) => entry.name === name);
-    return city ? cityPagePath(city.slug) : null;
-  };
   const isSupportedCity = (name: string) => cities.some((entry) => entry.name === name);
   const [state, action, pending] = useActionState<FirmFormState, FormData>(saveFirmAction, { errors: {} });
   const values: Partial<FirmInput> = state.values ?? firm ?? {};
@@ -94,18 +73,11 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
   const published = firm?.status === "published";
   const title = firm ? firm.name : "Yeni Firma Ekle";
 
-  // Visual-only mirror of the inputs for the card preview and the character counter.
-  const [preview, setPreview] = useState<Preview>(() => toPreview(values));
+  // Character counter for the short description (React resets the form after each action; re-sync).
+  const [shortLength, setShortLength] = useState(() => (values.shortDescription ?? "").length);
   useEffect(() => {
-    // React resets the form after each action; re-sync with the values it resets to.
-    setPreview(toPreview(state.values ?? firm ?? {}));
+    setShortLength((state.values ?? firm)?.shortDescription?.length ?? 0);
   }, [state, firm]);
-
-  const onChange = (event: FormEvent<HTMLFormElement>) => {
-    const target = event.target as HTMLInputElement;
-    const key = target.name as keyof Preview;
-    if (PREVIEW_KEYS.includes(key)) setPreview((prev) => ({ ...prev, [key]: target.value }));
-  };
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -148,10 +120,11 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
         {def.key === "shortDescription" ? (
           <div className="adm-fe__labelrow">
             {label}
-            <span className="adm-fe__count">{preview.shortDescription.length}/{SHORT_MAX}</span>
+            <span className="adm-fe__count">{shortLength}/{SHORT_MAX}</span>
           </div>
         ) : label}
-        {def.multiline ? <textarea rows={def.key === "shortDescription" ? 3 : 2} {...common} /> : <input type={def.type ?? "text"} {...common} />}
+        {def.multiline ? <textarea rows={def.key === "shortDescription" ? 3 : 2} {...common}
+          onChange={def.key === "shortDescription" ? (event) => setShortLength(event.currentTarget.value.length) : undefined} /> : <input type={def.type ?? "text"} {...common} />}
         {noteId && (
           <span className="adm-fe__hint" id={noteId}>Şehir listesindeki firma kartında, firma adının altında gösterilir.</span>
         )}
@@ -163,14 +136,15 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
   const cityError = state.errors.city;
   const selectedCity = values.city || DEFAULT_CITY;
   // Saved record's list page (null for a city outside the catalog).
-  const savedCityPath = firm ? cityPath(firm.city) : null;
+  const savedCity = firm ? cities.find((entry) => entry.name === firm.city) : undefined;
+  const savedCityPath = savedCity ? cityPagePath(savedCity.slug) : null;
   const packageError = state.errors.packageLevel;
   const packageNoteId = "firm-packageLevel-note";
   const categoryError = state.categoryError;
   const chosenCategories = new Set(state.categories ?? firmCategories);
 
   return (
-    <form action={action} onChange={onChange} className="adm-fe" noValidate>
+    <form action={action} className="adm-fe" noValidate>
       {firm && <input type="hidden" name="id" value={firm.id} />}
 
       <nav aria-label="Konum" className="adm-fe__crumbs">
@@ -266,17 +240,6 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
 
             {field(DEF.name)}
 
-            <div className={"adm-field adm-fe__narrow" + (cityError ? " adm-field--error" : "")}>
-              <label htmlFor="firm-city">{CITY_LABEL}<em className="adm-req" title="Yayın için zorunlu">*</em></label>
-              <select id="firm-city" name="city" defaultValue={selectedCity}
-                aria-invalid={cityError ? true : undefined} aria-describedby={cityError ? "firm-city-error" : undefined}>
-                {/* A stored value that is not a registered city stays visible (never silently replaced); saving it fails validation. */}
-                {!isSupportedCity(selectedCity) && <option value={selectedCity}>{selectedCity} (listede yok)</option>}
-                {cities.map((city) => <option key={city.slug} value={city.name}>{city.name}</option>)}
-              </select>
-              {cityError && <p className="adm-error" id="firm-city-error">{cityError}</p>}
-            </div>
-
             {field(DEF.shortDescription)}
           </section>
 
@@ -289,30 +252,7 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
               {field(DEF.website)}
             </div>
             {field(DEF.address)}
-          </section>
-
-          <section className="adm-fe__card" aria-labelledby="b-kategori">
-            <div className="adm-fe__cardhead">
-              <h2 id="b-kategori">Kategoriler</h2>
-              <span className="adm-fe__hint">Yalnızca yönetici</span>
-            </div>
-            {/* Marker: tells the server the category boxes were part of this submit, so unchecking all is not mistaken for "field missing". */}
-            <input type="hidden" name="categoriesPresent" value="1" />
-            <fieldset className={"adm-field" + (categoryError ? " adm-field--error" : "")}
-              aria-describedby={["firm-categories-note", categoryError ? "firm-categories-error" : undefined].filter(Boolean).join(" ")}
-              style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-              <legend style={{ padding: 0, marginBottom: 8 }}>Firmanın yer alacağı kategoriler<small> (birden fazla seçilebilir)</small></legend>
-              {categories.map((slug) => (
-                <label key={slug} htmlFor={`firm-category-${slug}`} style={{ display: "flex", gap: 8, alignItems: "center", margin: "4px 0" }}>
-                  <input type="checkbox" id={`firm-category-${slug}`} name="categories" value={slug} defaultChecked={chosenCategories.has(slug)} />
-                  <span>{slug}</span>
-                </label>
-              ))}
-              <span className="adm-fe__hint" id="firm-categories-note">
-                Firma yalnızca seçili kategorilerin sayfalarında listelenir. Hiçbiri seçilmezse firma yayında olsa bile hiçbir listede görünmez.
-              </span>
-              {categoryError && <p className="adm-error" id="firm-categories-error">{categoryError}</p>}
-            </fieldset>
+            {field(DEF.mapUrl)}
           </section>
 
           <section className="adm-fe__card" aria-labelledby="b-paket">
@@ -340,28 +280,34 @@ export default function FirmForm({ cities, categories, firmCategories, firm, pub
           </section>
         </div>
 
-        <aside className="adm-fe__side" aria-label="Önizleme ve yayın kontrolü">
-          <section className="adm-fe__card" aria-labelledby="b-onizleme">
-            <div className="adm-fe__cardhead adm-fe__cardhead--stack">
-              <h2 id="b-onizleme">Liste kartı önizlemesi</h2>
-              <span className="adm-fe__hint">{cityPath(preview.city) ?? "Şehir seçin"}</span>
+        <aside className="adm-fe__side" aria-label="Şehir, kategori ve yayın kontrolü">
+          <section className="adm-fe__card" aria-labelledby="b-secim">
+            <h2 id="b-secim" className="adm-sr">Şehir ve kategori</h2>
+            <div className="adm-pick">
+              <div className={"adm-field" + (cityError ? " adm-field--error" : "")}>
+                <label htmlFor="firm-city">{CITY_LABEL}<em className="adm-req" title="Yayın için zorunlu">*</em></label>
+                <select id="firm-city" name="city" defaultValue={selectedCity}
+                  aria-invalid={cityError ? true : undefined} aria-describedby={cityError ? "firm-city-error" : undefined}>
+                  {/* A stored value that is not a registered city stays visible (never silently replaced); saving it fails validation. */}
+                  {!isSupportedCity(selectedCity) && <option value={selectedCity}>{selectedCity} (listede yok)</option>}
+                  {cities.map((city) => <option key={city.slug} value={city.name}>{city.name}</option>)}
+                </select>
+                {cityError && <p className="adm-error" id="firm-city-error">{cityError}</p>}
+              </div>
+              {/* Marker: tells the server the category boxes were part of this submit, so unchecking all is not mistaken for "field missing". */}
+              <input type="hidden" name="categoriesPresent" value="1" />
+              <fieldset className={"adm-pick__cats" + (categoryError ? " adm-field--error" : "")}
+                aria-describedby={categoryError ? "firm-categories-error" : undefined}>
+                <legend>Kategori</legend>
+                {categories.map((category) => (
+                  <label key={category.slug} className="adm-pick__choice">
+                    <input type="checkbox" name="categories" value={category.slug} defaultChecked={chosenCategories.has(category.slug)} />
+                    <span>{category.name}</span>
+                  </label>
+                ))}
+                {categoryError && <p className="adm-error" id="firm-categories-error">{categoryError}</p>}
+              </fieldset>
             </div>
-            <div className="adm-fe__stage">
-              <article className="adm-fe__pcard" aria-label="Kart önizlemesi">
-                <div className="adm-fe__plogo" aria-hidden="true">{initials(preview.name) || "Logo"}</div>
-                <div className="adm-fe__pbody">
-                  <h3 className={preview.name.trim() ? "" : "is-empty"}>{preview.name.trim() || "Firma adı"}</h3>
-                  <span className="adm-fe__pmeta">{preview.city}</span>
-                  {preview.shortDescription.trim() && <p>{preview.shortDescription}</p>}
-                  <p className={preview.address.trim() ? "" : "is-empty"}>{preview.address.trim() || "Adres"}</p>
-                  <span className="adm-fe__pmeta">
-                    {[preview.phone.trim() || "Telefon", preview.email.trim() || "E-posta"].join(" · ")}
-                  </span>
-                  <span className="adm-fe__pbtn">Teklif Al</span>
-                </div>
-              </article>
-            </div>
-            <span className="adm-fe__hint">Önizleme yaklaşık görünümdür; kart yalnızca firma yayındayken listede gösterilir.</span>
           </section>
 
           <section className="adm-fe__card" aria-labelledby="b-kontrol">

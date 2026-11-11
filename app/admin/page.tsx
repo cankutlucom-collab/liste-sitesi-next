@@ -1,5 +1,6 @@
 import { adminConfigured, ADMIN_SETUP_HINT, isAdmin } from "../../lib/auth";
-import { firmProfilePath, listFirms, supportedCities, validateFirm, type Firm, type FirmStatus } from "../../lib/firms";
+import { listCategories } from "../../lib/category-store";
+import { firmProfilePath, listFirmCategoryIndex, listFirms, supportedCities, validateFirm, type Firm, type FirmStatus } from "../../lib/firms";
 import { setStatusAction } from "./actions";
 import LoginForm from "./LoginForm";
 import DeleteDraftForm from "./DeleteDraftForm";
@@ -27,6 +28,11 @@ function one(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
 }
 
+function many(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
+}
+
 const TR_FOLD: Record<string, string> = { ı: "i", ş: "s", ğ: "g", ü: "u", ö: "o", ç: "c" };
 
 // Diacritic-insensitive search key: "Arıtma"/"aritma" and "İstanbul"/"Istanbul" all match.
@@ -45,11 +51,12 @@ function initials(name: string): string {
   return letters.toLocaleUpperCase("tr-TR") || "?";
 }
 
-// Status cards keep the current search and city; only the status changes.
-function filterHref(q: string, city: string, status: string): string {
+// Status cards keep the current search, city and categories; only the status changes.
+function filterHref(q: string, city: string, status: string, categories: string[]): string {
   const query = new URLSearchParams();
   if (q) query.set("q", q);
   if (city) query.set("il", city);
+  for (const slug of categories) query.append("k", slug);
   if (status) query.set("f", status);
   const text = query.toString();
   return text ? `/admin?${text}` : "/admin";
@@ -81,14 +88,20 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
   const published = firms.filter((firm) => firm.status === "published").length;
   const drafts = firms.length - published;
 
+  const categories = listCategories();
+  const knownCategories = new Set(categories.map((category) => category.slug));
+  const pickedCategories = many(params.k).filter((slug) => knownCategories.has(slug));
+  const pickedSet = new Set(pickedCategories);
+  const categoryIndex = listFirmCategoryIndex();
   const needle = norm(q);
   const shown = firms.filter((firm) =>
     (!statusFilter || firm.status === statusFilter)
     && (!city || firm.city === city)
+    && (pickedSet.size === 0 || [...pickedSet].some((slug) => categoryIndex.get(firm.id)?.has(slug)))
     && (!needle || norm(firm.name).includes(needle)));
 
   const cards = [
-    { key: "", label: "Toplam firma", count: firms.length, dot: null },
+    { key: "", label: "Toplam firma", count: firms.length, dot: null as string | null },
     { key: "yayinda", label: "Yayında", count: published, dot: "#1F9D55" },
     { key: "taslak", label: "Taslak", count: drafts, dot: "#E08A00" },
   ];
@@ -110,12 +123,12 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
       <nav className="adm-stats" aria-label="Duruma göre filtrele">
         {cards.map((card) => (
-          <a key={card.label} href={filterHref(q, city, card.key)} className="adm-stat"
+          <a key={card.label} href={filterHref(q, city, card.key, pickedCategories)} className="adm-stat"
             aria-current={statusKey === card.key ? "true" : undefined}>
             <span className="adm-stat__label">
               {card.dot
                 ? <span className="adm-stat__dot" style={{ background: card.dot }} aria-hidden="true" />
-                : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0013A3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5" /></svg>}
+                : null}
               {card.label}
             </span>
             <span className="adm-stat__count">{card.count}</span>
@@ -132,21 +145,26 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A6B80" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
               <input id="ara" type="search" name="q" defaultValue={q} maxLength={100} placeholder="Firma adına göre ara" />
             </div>
-            <label className="adm-filter">İl
-              <select name="il" defaultValue={city} className="adm-filter__city">
-                <option value="">Tüm iller</option>
-                {cityNames.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
-            <label className="adm-filter">Durum
-              <select name="f" defaultValue={statusKey}>
-                <option value="">Tüm durumlar</option>
-                <option value="yayinda">Yayında</option>
-                <option value="taslak">Taslak</option>
-              </select>
-            </label>
+            <div className="adm-pick">
+              <div className="adm-field">
+                <label htmlFor="il-sec">Şehir<em className="adm-req" title="Listeyi şehre göre süzer">*</em></label>
+                <select id="il-sec" name="il" defaultValue={city}>
+                  <option value="">Tüm şehirler</option>
+                  {cityNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+              <fieldset className="adm-pick__cats">
+                <legend>Kategori<em className="adm-req" title="Listeyi kategoriye göre süzer">*</em></legend>
+                {categories.map((category) => (
+                  <label key={category.slug} className="adm-pick__choice">
+                    <input type="checkbox" name="k" value={category.slug} defaultChecked={pickedSet.has(category.slug)} />
+                    <span>{category.name}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </div>
             <button type="submit" className="adm-btn adm-btn--tall">Uygula</button>
-            {(q || city || statusKey) &&<a href="/admin" className="adm-link">Temizle</a>}
+            {(q || city || statusKey || pickedCategories.length > 0) && <a href="/admin" className="adm-link">Temizle</a>}
           </form>
         </div>
 

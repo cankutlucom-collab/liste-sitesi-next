@@ -148,9 +148,13 @@ function introSection(firm: Firm): string {
 }
 
 function addressSection(firm: Firm): string {
+  // Only when a map link is stored; otherwise no map box at all.
+  const mapLink = firm.mapUrl
+    ? `\n<a href="${escapeHtml(firm.mapUrl)}"${EXTERNAL} style="${VALUE}; align-self: flex-start">Google Maps'te aç</a>`
+    : "";
   return `<section aria-labelledby="profil-adres" style="${CARD}">
 <h2 id="profil-adres" style="${H2}">Adres</h2>
-<p style="margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 16px; color: #3E4F63">${icon(ICON_PIN)}<span>${escapeHtml(firm.address)}</span></p>
+<p style="margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 16px; color: #3E4F63">${icon(ICON_PIN)}<span>${escapeHtml(firm.address)}</span></p>${mapLink}
 </section>`;
 }
 

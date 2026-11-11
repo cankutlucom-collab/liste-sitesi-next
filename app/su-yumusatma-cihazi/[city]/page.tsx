@@ -43,7 +43,7 @@ async function loadCity(params: Params): Promise<City> {
 function cityTemplate(city: City, h1: string): string {
   const title = city.name + " " + CITY_PAGE_KEYWORD;
   return setDesignH1(
-    linkPolicyPages(linkHomeDesignNavigation(home, CATEGORY_SLUG))
+    linkPolicyPages(linkHomeDesignNavigation(home, CATEGORY_SLUG, city.slug))
       .replaceAll(DESIGN_PAGE_KEYWORD, () => title)
       .replace("Şehrinizdeki " + title, () => title)
       .replace(DESIGN_DESCRIPTION_SUBJECT, () => CITY_DESCRIPTION_SUBJECT)
