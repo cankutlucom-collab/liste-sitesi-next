@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     ok = "kaydedildi";
   }
 
-  if (!result.ok) return back(`hata=${result.code}&slot=${slot}`);
+  if (result.ok === false) return back(`hata=${result.code}&slot=${slot}`);
   revalidatePath("/", "layout");
   return back(`durum=${ok}&slot=${slot}`);
 }

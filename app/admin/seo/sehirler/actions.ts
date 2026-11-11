@@ -27,7 +27,7 @@ function refresh(slug?: string) {
 export async function createCityAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const result = createCity(formData.get("slug"), formData.get("name"));
-  if (!result.ok) redirect(`${BASE}?hata=${result.code}`);
+  if (result.ok === false) redirect(`${BASE}?hata=${result.code}`);
   refresh(result.slug);
   redirect(`${BASE}?durum=eklendi&sehir=${encodeURIComponent(result.slug ?? "")}`);
 }
@@ -36,7 +36,7 @@ export async function deleteCityAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const slug = slugField(formData);
   const result = deleteCity(slug);
-  if (!result.ok) redirect(`${BASE}?hata=${result.code}`);
+  if (result.ok === false) redirect(`${BASE}?hata=${result.code}`);
   refresh(slug);
   redirect(`${BASE}?durum=silindi`);
 }

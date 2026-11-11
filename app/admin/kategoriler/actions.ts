@@ -27,7 +27,7 @@ function editorUrl(category: string, city: string): string {
 /** Back to the same page's editor with either a success or an error code. */
 function done(result: Result, category: string, city: string, ok: string): never {
   const url = editorUrl(category, city);
-  if (!result.ok) redirect(`${url}&hata=${result.code}`);
+  if (result.ok === false) redirect(`${url}&hata=${result.code}`);
   // Page texts are read per request, but the whole site is marked anyway (same as the other panel actions).
   revalidatePath("/", "layout");
   revalidatePath(BASE);
@@ -37,7 +37,7 @@ function done(result: Result, category: string, city: string, ok: string): never
 export async function createCategoryAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const result = createCategory(formData.get("slug"), formData.get("name"));
-  if (!result.ok) redirect(`${BASE}?hata=${result.code}`);
+  if (result.ok === false) redirect(`${BASE}?hata=${result.code}`);
   revalidatePath("/", "layout");
   revalidatePath(BASE);
   redirect(`${BASE}?durum=eklendi&kategori=${encodeURIComponent(result.slug ?? "")}`);
@@ -47,7 +47,7 @@ export async function renameCategoryAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const category = field(formData, "category");
   const result = renameCategorySlug(category, formData.get("slug"));
-  if (!result.ok) redirect(`${editorUrl(category, "")}&hata=${result.code}`);
+  if (result.ok === false) redirect(`${editorUrl(category, "")}&hata=${result.code}`);
   revalidatePath("/", "layout");
   revalidatePath(BASE);
   redirect(`${editorUrl(result.slug ?? category, "")}&durum=adres-kaydedildi`);
