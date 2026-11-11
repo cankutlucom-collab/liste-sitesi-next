@@ -1,0 +1,33 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "IBM Plex Sans", sans-serif; }
+a { color: #0013a3; }
+.project-nav { display: flex; flex-wrap: wrap; gap: .75rem 1rem; padding: 1rem; background: #eef1fc; }
+.demo-note { margin: 0; padding: .5rem 1rem; color: #374151; }
+.mobile-design { display: none; }
+[hidden] { display: none !important; }
+@media (max-width: 700px) {
+  .desktop-design { display: none; }
+  .mobile-design { display: block; overflow-wrap: anywhere; }
+  .mobile-design > div { max-width: 100% !important; }
+}
+
+[data-city-suggestions] {
+  max-height: 15rem;
+  overflow-y: auto;
+  margin-top: .375rem;
+  padding: .5rem;
+  background: white;
+  color: #0a1466;
+  border: 1px solid #bcc4f0;
+  border-radius: 8px;
+}
+[data-city-suggestions] a {
+  display: block;
+  padding: .5rem .75rem;
+  color: inherit;
+}
+[data-city-suggestions] a:hover,
+[data-city-suggestions] a:focus-visible {
+  background: #eef1fc;
+}
